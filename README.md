@@ -2,7 +2,7 @@
 
 Remote MCP server that exposes the **AI-SDLC Inception phase** as live, queryable state. Backed by GitHub Issues + repo markdown. Multiple dev agents read it concurrently and pick up unblocked work in parallel without ever cloning the inception folder.
 
-Pairs with the [ai-sdlc](https://github.com/your-org/ai-sdlc) skill that produces the Inception artifacts.
+Pairs with the [ai-sdlc](https://github.com/NguyenKhacPhuc/ai-sdlc) skill that produces the Inception artifacts.
 
 ## Why
 
@@ -111,30 +111,32 @@ Add to `~/.claude/mcp.json` (or whatever your client expects):
 
 ### 5. Bootstrap a feature
 
-The driver runs `publish_feature` once, passing the locally-produced Inception artifacts. The MCP commits the markdown to the repo and creates GH issues with proper labels and `Blocked by:` linkage.
+After Inception artifacts are agreed by the mob, run the bundled CLI from your laptop. It walks the feature folder, builds the payload, and POSTs to the MCP's `/publish-feature` endpoint:
 
-```js
-// pseudocode for the driver-side payload
-publish_feature({
-  feature_slug: "260503-1500-image-attachments",
-  files: {
-    "PRD.md":            "<contents>",
-    "api-contract.md":   "<contents>",
-    "decisions.md":      "<contents>",
-    "out-of-scope.md":   "<contents>",
-    "open-questions.md": "<contents>",
-    "_index.md":         "<contents>",
-  },
-  issues: [
-    { local_id: 1, title: "[Android] Add Coil dependency", body: "...", lane: "android", estimate: "15m", blocked_by_local: [] },
-    { local_id: 2, title: "[Android] Extend Note model...", body: "...", lane: "android", estimate: "30m", blocked_by_local: [] },
-    { local_id: 8, title: "[Android] Plumb picked URIs...", body: "...", lane: "android", estimate: "60m", blocked_by_local: [2, 4, 7] },
-    // ...
-  ],
-});
+```bash
+# from the inception-mcp checkout, with .env loaded:
+bun src/cli/publish.ts /path/to/your-project/inception/<feature-slug>
+
+# example for the demo feature:
+bun src/cli/publish.ts /Users/steve/Documents/mindnote/inception/260503-1500-image-attachments
 ```
 
-The MCP commits files, creates issues in topological order (so `local_id`s can be remapped to GH issue numbers in `Blocked by:` lines), and returns the `local_id → gh_number` mapping.
+What the CLI does:
+
+1. Reads top-level markdown (`PRD.md`, `api-contract.md`, `decisions.md`, `open-questions.md`, `out-of-scope.md`, `_index.md`).
+2. Walks `issues/{backend,android,ios}/*.md`, parses each file's frontmatter for `lane`, `estimate`, `blocked-by` wikilinks.
+3. Extracts `local_id` from filename (`01-add-coil-dependency.md` → `1`).
+4. Resolves `blocked-by: [[02-...]]` wikilinks → numeric local_ids (`[2]`).
+5. POSTs `{ feature_slug, files, issues }` to `${MCP_URL}/publish-feature`.
+
+What the MCP does:
+
+1. Commits the markdown files to the target repo under `inception/<slug>/`.
+2. Creates GH issues in topological order (blockers first), with labels `feature/<slug>`, `lane/<x>`, `status/ready`, `est/<n>m`, `inception`.
+3. Rewrites each body's `Blocked by: #N, #M` line, mapping `local_id` references to the just-allocated GH issue numbers.
+4. Returns the `local_id → gh_number` mapping for your records.
+
+If you'd rather call from inside Claude Code instead of a terminal: the same logic is exposed as the `publish_feature` MCP tool, taking the same payload shape.
 
 ## Daily flow for devs
 

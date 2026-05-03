@@ -66,6 +66,21 @@ const app = new Hono();
 
 app.get("/health", (c) => c.text("ok"));
 
+// Bootstrap REST endpoint for the publish-from-local CLI.
+// Same bearer auth as the MCP endpoint; calls the same tool implementation.
+app.post("/publish-feature", async (c) => {
+  const auth = c.req.header("authorization") ?? "";
+  if (auth !== `Bearer ${MCP_TOKEN}`) return c.text("unauthorized", 401);
+  try {
+    const body = await c.req.json();
+    const result = await tools.publishFeature(body);
+    return c.json(result);
+  } catch (e: any) {
+    console.error("publish-feature error:", e);
+    return c.json({ ok: false, error: e?.message ?? "unknown" }, 500);
+  }
+});
+
 app.all("/mcp", async (c) => {
   const auth = c.req.header("authorization") ?? "";
   if (auth !== `Bearer ${MCP_TOKEN}`) return c.text("unauthorized", 401);
