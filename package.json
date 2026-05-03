@@ -1,0 +1,23 @@
+{
+  "name": "inception-mcp",
+  "version": "0.1.0",
+  "description": "Remote MCP server exposing AI-SDLC Inception artifacts (PRD, decisions, issues, contract) backed by GitHub. Lets multiple dev agents pick up unblocked work in parallel without cloning the repo.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/server.ts",
+    "start": "bun src/server.ts",
+    "build": "bun build src/server.ts --target=bun --outdir=dist",
+    "typecheck": "tsc --noEmit",
+    "publish-feature": "bun src/cli/publish.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@octokit/rest": "^21.0.0",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.6.0"
+  }
+}
