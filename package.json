@@ -1,5 +1,5 @@
 {
-  "name": "inception-mcp",
+  "name": "orchestration-mcp",
   "version": "0.1.0",
   "description": "Remote MCP server exposing AI-SDLC Inception artifacts (PRD, decisions, issues, contract) backed by GitHub. Lets multiple dev agents pick up unblocked work in parallel without cloning the repo.",
   "type": "module",

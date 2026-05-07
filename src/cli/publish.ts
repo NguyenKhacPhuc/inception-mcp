@@ -64,19 +64,21 @@ function extractTitle(body: string): string {
   return "(untitled)";
 }
 
-function localIdFromFilename(name: string): number {
-  const m = name.match(/^(\d+)-/);
-  return m ? Number(m[1]) : 0;
+function refFromFilename(name: string): string {
+  return name.replace(/\.md$/, "");
 }
 
-function parseBlockedByList(value: any): number[] {
+// Wikilinks look like "[[01-image-pick-and-camera-deps]]" — preserve the full
+// slug. Resolution is per-lane (the inception convention): a wikilink in an
+// android issue refers to another android issue by filename.
+function parseBlockedByRefs(value: any): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .map((s: string) => {
-      const m = String(s).match(/(\d+)/);
-      return m ? Number(m[1]) : 0;
+      const m = String(s).match(/\[\[(.+?)\]\]/);
+      return m ? m[1].trim() : null;
     })
-    .filter((n: number) => n > 0);
+    .filter((s): s is string => !!s);
 }
 
 const TOP_LEVEL_FILES = [
@@ -99,41 +101,76 @@ async function readTopLevelFiles(): Promise<Record<string, string>> {
 }
 
 interface IssuePayload {
-  local_id: number;
+  local_id: number;          // globally-unique sequential id assigned here
   title: string;
   body: string;
   lane: string;
   estimate?: string;
-  blocked_by_local: number[];
+  blocked_by_local: number[]; // refs to other local_ids in this payload
 }
 
-async function readIssues(): Promise<IssuePayload[]> {
+interface RawIssue {
+  ref: string;     // filename slug, e.g. "01-image-pick-and-camera-deps"
+  lane: string;
+  title: string;
+  body: string;
+  estimate?: string;
+  blocked_by_refs: string[];
+}
+
+async function readRawIssues(): Promise<RawIssue[]> {
   const issuesDir = join(featurePath, "issues");
   let lanes: string[] = [];
   try { lanes = await readdir(issuesDir); } catch { return []; }
-  const out: IssuePayload[] = [];
-  for (const lane of lanes) {
+  const out: RawIssue[] = [];
+  for (const lane of lanes.sort()) {
     const dir = join(issuesDir, lane);
     if (!(await stat(dir)).isDirectory()) continue;
-    for (const f of await readdir(dir)) {
+    for (const f of (await readdir(dir)).sort()) {
       if (!f.endsWith(".md")) continue;
       const text = await readFile(join(dir, f), "utf8");
       const { fm, body } = splitFrontmatter(text);
       out.push({
-        local_id: localIdFromFilename(f),
+        ref: refFromFilename(f),
+        lane: String(fm.lane ?? lane),
         title: extractTitle(body),
         body,
-        lane: String(fm.lane ?? lane),
         estimate: fm.estimate ? String(fm.estimate) : undefined,
-        blocked_by_local: parseBlockedByList(fm["blocked-by"]),
+        blocked_by_refs: parseBlockedByRefs(fm["blocked-by"]),
       });
     }
   }
-  return out.sort((a, b) => a.local_id - b.local_id);
+  return out;
+}
+
+// Per-lane filename-slug numbering means refs collide across lanes
+// (`backend/01-...` and `android/01-...` are both "01-..."). To send the MCP
+// a globally-unique key, assign a sequential id and resolve each
+// `blocked-by` wikilink within the issue's own lane.
+function buildPayload(raw: RawIssue[]): IssuePayload[] {
+  const refToId = new Map<string, number>(); // key: `${lane}:${ref}` -> id
+  raw.forEach((it, i) => refToId.set(`${it.lane}:${it.ref}`, i + 1));
+  return raw.map((it, i) => ({
+    local_id: i + 1,
+    title: it.title,
+    body: it.body,
+    lane: it.lane,
+    estimate: it.estimate,
+    blocked_by_local: it.blocked_by_refs
+      .map((ref) => {
+        const id = refToId.get(`${it.lane}:${ref}`);
+        if (id === undefined) {
+          console.warn(`  WARN: ${it.lane}/${it.ref}: unresolved blocked-by [[${ref}]] (no same-lane match)`);
+        }
+        return id;
+      })
+      .filter((n): n is number => typeof n === "number"),
+  }));
 }
 
 const files = await readTopLevelFiles();
-const issues = await readIssues();
+const rawIssues = await readRawIssues();
+const issues = buildPayload(rawIssues);
 
 console.log(`Publishing feature: ${slug}`);
 console.log(`  source folder: ${featurePath}`);

@@ -1,4 +1,4 @@
-# inception-mcp
+# orchestration-mcp
 
 Remote MCP server that exposes the **AI-SDLC Inception phase** as live, queryable state. Backed by GitHub Issues + repo markdown. Multiple dev agents read it concurrently and pick up unblocked work in parallel without ever cloning the inception folder.
 
@@ -18,7 +18,7 @@ The MCP centralizes this. State lives in **GitHub Issues**; the MCP computes wav
 
 ```
 ┌─────────────┐                ┌───────────────────────┐                ┌────────────┐
-│ Dev A agent │ ◄──HTTP+SSE──► │ inception-mcp (Bun)   │ ◄──Octokit────►│ GitHub API │
+│ Dev A agent │ ◄──HTTP+SSE──► │ orchestration-mcp (Bun)│ ◄──Octokit────►│ GitHub API │
 └─────────────┘                │  - resources          │                └────────────┘
 ┌─────────────┐                │  - tools              │
 │ Dev B agent │ ◄──HTTP+SSE──► │  - wave compute       │
@@ -114,7 +114,7 @@ Add to `~/.claude/mcp.json` (or whatever your client expects):
 After Inception artifacts are agreed by the mob, run the bundled CLI from your laptop. It walks the feature folder, builds the payload, and POSTs to the MCP's `/publish-feature` endpoint:
 
 ```bash
-# from the inception-mcp checkout, with .env loaded:
+# from the orchestration-mcp checkout, with .env loaded:
 bun src/cli/publish.ts /path/to/your-project/inception/<feature-slug>
 
 # example for the demo feature:
